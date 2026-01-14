@@ -1,0 +1,7 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/album/[id]/page": "app/album/[id]/page.js",
+  "/test-supabase/page": "app/test-supabase/page.js",
+  "/page": "app/page.js",
+  "/icon.png/route": "app/icon.png/route.js"
+}
