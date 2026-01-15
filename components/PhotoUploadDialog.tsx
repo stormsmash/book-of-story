@@ -6,6 +6,7 @@ import { Close, CloudUpload, Image as ImageIcon } from "@mui/icons-material";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDropzone } from "react-dropzone";
 import Image from "next/image";
+import imageCompression from "browser-image-compression";
 
 interface PhotoUploadDialogProps {
   open: boolean;
@@ -20,6 +21,10 @@ export const PhotoUploadDialog = ({ open, onClose, onUpload, albumTitle }: Photo
   const [caption, setCaption] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [compressing, setCompressing] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState(0);
+  const [originalSize, setOriginalSize] = useState<number | null>(null);
+  const [compressedSize, setCompressedSize] = useState<number | null>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -51,8 +56,35 @@ export const PhotoUploadDialog = ({ open, onClose, onUpload, albumTitle }: Photo
     setLoading(true);
     setError("");
 
+    let fileToUpload = selectedFile;
+
+    // Apply compression if the file is larger than 1MB
+    if (selectedFile.size > 1024 * 1024) {
+      setCompressing(true);
+      setCompressionProgress(0);
+      try {
+        const options = {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true,
+          onProgress: (progress: number) => {
+            setCompressionProgress(progress);
+          },
+        };
+
+        setOriginalSize(selectedFile.size);
+        fileToUpload = await imageCompression(selectedFile, options);
+        setCompressedSize(fileToUpload.size);
+      } catch (err) {
+        console.error("Compression error:", err);
+        // Fallback to original file if compression fails
+      } finally {
+        setCompressing(false);
+      }
+    }
+
     try {
-      await onUpload(selectedFile, caption);
+      await onUpload(fileToUpload, caption);
       handleClose();
     } catch (err) {
       setError("เกิดข้อผิดพลาดในการอัปโหลด กรุณาลองใหม่อีกครั้ง");
@@ -66,6 +98,8 @@ export const PhotoUploadDialog = ({ open, onClose, onUpload, albumTitle }: Photo
     setPreview("");
     setCaption("");
     setError("");
+    setOriginalSize(null);
+    setCompressedSize(null);
     onClose();
   };
 
@@ -195,13 +229,28 @@ export const PhotoUploadDialog = ({ open, onClose, onUpload, albumTitle }: Photo
 
         <TextField fullWidth label="คำบรรยายภาพ" value={caption} onChange={(e) => setCaption(e.target.value)} multiline rows={4} placeholder="เขียนคำบรรยายสำหรับรูปภาพนี้... (ไม่บังคับ)" inputProps={{ maxLength: 500 }} helperText={`${caption.length}/500 ตัวอักษร`} disabled={loading} />
 
-        {loading && (
+        {compressing && (
+          <Box sx={{ mt: 2 }}>
+            <LinearProgress variant="determinate" value={compressionProgress} />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block", textAlign: "center" }}>
+              กำลังย่อขนาดรูปภาพ ({compressionProgress}%)...
+            </Typography>
+          </Box>
+        )}
+
+        {loading && !compressing && (
           <Box sx={{ mt: 2 }}>
             <LinearProgress />
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block", textAlign: "center" }}>
               กำลังอัปโหลด...
             </Typography>
           </Box>
+        )}
+
+        {compressedSize && originalSize && (
+          <Typography variant="caption" color="success.main" sx={{ mt: 1, display: "block", textAlign: "center" }}>
+            ย่อขนาดสำเร็จ: {(originalSize / 1024 / 1024).toFixed(2)}MB → {(compressedSize / 1024 / 1024).toFixed(2)}MB
+          </Typography>
         )}
       </DialogContent>
 
